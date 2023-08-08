@@ -1,83 +1,68 @@
-import struct
 import io, os
-import argparse
-import lz4.block
-import lz4.frame
-import xmltodict
-from defusedxml import ElementTree
-
-parser = argparse.ArgumentParser(description='Create modsetting entry for mod')
-parser.add_argument('modfile', type=argparse.FileType('rb'))
-args = parser.parse_args()
-modfile = args.modfile
-print(modfile.name)
-
-
-class Uncompressed : io.RawIOBase:
-
-
-class CompressionMethod(Enum):
-
-
-class PackagedFileInfo:
-    ArchivePart : int
-    Crc : Union[None, int]
-    Flags : int
-    OffsetInFile : int
-    SizeOnDisk : int
-    UncompressedSize : int
-    #public bool Solid;
-    #public UInt32 SolidOffset;
-    #public Stream SolidStream;
-    #private Stream _uncompressedStream;
-
+#from defusedxml import ElementTree
+from xml.etree import ElementTree
+import pak
+import copy
+from abc import ABC
 
         
 
+class ModMetaLsx:
+    REQUIRED_ATTRIBUTES = ["Folder", "Name", "UUID"]
+    def __init__(self, xml_string):
+        self.root : ElementTree
+        self.info : ElementTree.Element
+        try:
+            self.root = ElementTree.fromstring(meta_file.read())
+        except:
+            raise Exception(f"meta.lsx is not a valid xml file")
+        self.info = self.root.find("./region[@id='Config']/node[@id='root']/children/node[@id='ModuleInfo']")
+        if self.info is None:
+            raise Exception(f"meta.lsx does not contain module info")
+    def get_required_attributes(self):
+        return [e for e in self.info.iter(tag='attribute') if e.get('id') in self.REQUIRED_ATTRIBUTES]
 
-class PackageReader:
-    magic = b"LSPK"
+class ModSettingsLsx:
+    def __init__(self, file):
+        self.tree : ElementTree = None
+        self.root : Element = None
+        self.mods : Element = None
 
-    def decode_xml(self, xml):
-        #root = xmltodict.parse(xml)
-        root = ElementTree.fromstring(xml)
-        print(root)
-        info = root.find("./region[@id='Config']/node[@id='root']/children/node[@id='ModuleInfo']")
-        print('                        <node id="ModuleShortDesc">')
-        print(ElementTree.tostring(info, encoding='unicode'))
-        #for att in info:
-        #    if att["@id"] in ["Folder", "MD5", "Name", "UUID", "Version"]:
-       #         print(att)
-        #        print(f"                            <attribute id=\"{att['@id']}\" type=\"{att['@type']}\" value=\"{att['@value']}\"/>")
-        print('                        </node>')
-    def readV18(self, file):
-        file.seek(8, 0)
-        file_list_offset = struct.unpack("<Q", file.read(8))[0]
-        file_list_size = struct.unpack("<I", file.read(4))[0]
-        flags = file.read(1)[0]
-        priority = file.read(1)[0]
-        md5 = file.read(16)
-        num_parts = struct.unpack("<H",file.read(2))[0]
+        try:
+            self.tree = ElementTree.parse(file)
+        except:
+            raise Exception(f"modsettings.lsx is not a valid xml file")
+        self.root = self.tree.getroot()
+        self.mods = self.root.find("./region[@id='ModuleSettings']/node[@id='root']/children/node[@id='Mods']/children")
+    def insert_mod(self, meta_lsx):
         
-        file.seek(file_list_offset, 0)
-        num_files = struct.unpack("<I", file.read(4))[0]
-        compressed_size = struct.unpack("<I", file.read(4))[0]
-#        print(num_files, compressed_size)
 
-        compressed_list = file.read(compressed_size)
- #       print(compressed_list)
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description='Create modsetting entry for mod')
+    parser.add_argument('modsettings', type=argparse.FileType('r'))
+    parser.add_argument('modfile', type=argparse.FileType('rb'))
+    args = parser.parse_args()
+    modfile = args.modfile
+    modsettings = args.modsettings
+    print(modsettings.name)
+    settings = ModSettingsLsx(modsettings)
+    print(settings.mods)
 
-        file_entry_size = 256+4+2+1+1+4+4
+    print(modfile.name)
+    package = pak.PackageReader(modfile)
 
-        uncompressed_list = lz4.block.decompress(compressed_list, uncompressed_size=num_files*(256+4+2+1+1+4+4))
-        files = []
-        for i in range(0, num_files):
-            list_entry = uncompressed_list[(i*file_entry_size):((i+1)*file_entry_size)]
-  #          print(len(list_entry))
-            files.append(struct.unpack("<256sIHBBII", list_entry))
-        self._files = files
-   #     print(files)
-        
+    meta_files = [f for f in package.files if f.info.name.endswith("/meta.lsx")]
+    print(meta_files)
+    for meta_file in meta_files:
+        print(meta_file.info.name)
+        meta = ModMetaLsx(meta_file.read())
+        ElementTree.indent(meta.root, space='    ', level=0)
+        print(ElementTree.tostring(meta.info).decode())
+        print([ElementTree.tostring(a) for a in meta.get_required_attributes()])
+
+
+"""
         for i, f in enumerate(files):
             path = f[0].decode().split('\0',1)[0]
             if path.endswith('meta.lsx'):
@@ -102,30 +87,4 @@ class PackageReader:
             self.decode_xml(uncompressed_data.decode())
         else:
             print(f"could not find meta file for {file.name}")
-
-
-    def __init__(self, file):
-        # first check for v13 headers, which are always at the end of the file
-        file.seek(-8, 2)
-        header_size = struct.unpack("<I", file.read(4))[0]
-        signature = file.read(4)[0]
-      #  print(signature)
-        if signature == self.magic:
-            raise Exception("V13 not supported")
-            return
-        file.seek(0, 0)
-        signature = file.read(4)
-       # print(signature)
-        if signature == self.magic:
-            version = struct.unpack("<I", file.read(4))[0]
-            if version == 18:
-                self.readV18(file)
-                return 
-            else:
-                raise Exception(f"V{version} not supported")
-        # TODO: handle V7 and V9
-        raise Exception("Version not supported or magic not found")
-
-
-
-PackageReader(modfile)
+"""
