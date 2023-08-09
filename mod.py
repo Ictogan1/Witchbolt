@@ -1,40 +1,49 @@
 import io, os
-#from defusedxml import ElementTree
-from xml.etree import ElementTree
+from lxml import etree
 import pak
-import copy
-from abc import ABC
+import lsx_attribute
+from copy import deepcopy
+import re
 
-        
+xmlparser = etree.XMLParser(remove_blank_text = True)
+
+class ModInfo:
+    META_ATTRIBUTES = ["Folder", "Name", "UUID", "MD5", "Version"]
+    def __init__(self, module_info_element : etree.Element):
+        self.element = module_info_element
+        self.attributes : List[Element] = []
+        for e in self.element:
+            if e.tag == "attribute":
+                self.attributes.append(e)
+                print(etree.tostring(e))
+                print(etree.tostring(lsx_attribute.LsxAttribute.from_etree_element(e).to_etree_element()))
+
 
 class ModMetaLsx:
-    REQUIRED_ATTRIBUTES = ["Folder", "Name", "UUID"]
     def __init__(self, xml_string):
-        self.root : ElementTree
-        self.info : ElementTree.Element
+        self.root : ElementTree = None
+        self.info : List[etree.Element] = None
+
         try:
-            self.root = ElementTree.fromstring(meta_file.read())
+            self.root = etree.fromstring(meta_file.read(), parser = xmlparser)
         except:
             raise Exception(f"meta.lsx is not a valid xml file")
-        self.info = self.root.find("./region[@id='Config']/node[@id='root']/children/node[@id='ModuleInfo']")
-        if self.info is None:
+        self.info = self.root.findall("./region[@id='Config']/node[@id='root']/children/node[@id='ModuleInfo']")
+        if not self.info:
             raise Exception(f"meta.lsx does not contain module info")
-    def get_required_attributes(self):
-        return [e for e in self.info.iter(tag='attribute') if e.get('id') in self.REQUIRED_ATTRIBUTES]
 
 class ModSettingsLsx:
     def __init__(self, file):
-        self.tree : ElementTree = None
+        self.tree : etree = None
         self.root : Element = None
         self.mods : Element = None
 
         try:
-            self.tree = ElementTree.parse(file)
+            self.tree = etree.parse(file, parser = xmlparser)
         except:
             raise Exception(f"modsettings.lsx is not a valid xml file")
         self.root = self.tree.getroot()
         self.mods = self.root.find("./region[@id='ModuleSettings']/node[@id='root']/children/node[@id='Mods']/children")
-    def insert_mod(self, meta_lsx):
         
 
 if __name__ == "__main__":
@@ -52,15 +61,15 @@ if __name__ == "__main__":
     print(modfile.name)
     package = pak.PackageReader(modfile)
 
-    meta_files = [f for f in package.files if f.info.name.endswith("/meta.lsx")]
+    meta_files = [f for f in package.files if re.fullmatch("Mods/([^/]+)/meta.lsx", f.info.name)]
     print(meta_files)
     for meta_file in meta_files:
         print(meta_file.info.name)
         meta = ModMetaLsx(meta_file.read())
-        ElementTree.indent(meta.root, space='    ', level=0)
-        print(ElementTree.tostring(meta.info).decode())
-        print([ElementTree.tostring(a) for a in meta.get_required_attributes()])
-
+        etree.indent(meta.root, space='    ')
+        print(etree.tostring(meta.root, pretty_print=True).decode())
+        for e in meta.info:
+            modinfo = ModInfo(e)
 
 """
         for i, f in enumerate(files):
