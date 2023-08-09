@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
 
     print(etree.tostring(settings.root, pretty_print=True).decode())
-#    settings.save_file()
+    settings.save_file()
 
 """
         for i, f in enumerate(files):
