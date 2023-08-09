@@ -136,12 +136,14 @@ def lookup_type(type_name):
     return DATA_TYPE_LOOKUP_TABLE.get(type_name) or Unknown_DataType(type_name)
 
 class LsxAttribute:
-    def __init__(self, attr_id : str=None, value : DataType = None):
+    def __init__(self, attr_id : str=None, value : DataType = None, element : etree.Element = None):
         self.id = attr_id
         self.value = value
+        self.element = element
 
     def from_etree_element(e : etree.Element):
         self = LsxAttribute()
+        self.element = e
         self.id = e.get('id')
         type_name = e.get('type')
         value_string = e.get('value')

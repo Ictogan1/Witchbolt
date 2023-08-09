@@ -89,7 +89,7 @@ class PackagedFileInfo:
     def from_file_entry_15(buf : bytes):
         self = PackagedFileInfo()
         entry = FileEntry15.from_buffer_copy(buf)
-        self.name = c_char_p(entry.name).value
+        self.name = c_char_p(entry.name).value.decode()
         self.offset_in_file = entry.offset_in_file
         self.size_on_disk = entry.size_on_disk
         self.uncompressed_size = entry.uncompressed_size
@@ -101,7 +101,7 @@ class PackagedFileInfo:
     def from_file_entry_18(buf : bytes):
         self = PackagedFileInfo()
         entry = FileEntry18.from_buffer_copy(buf)
-        self.name = c_char_p(entry.name).value
+        self.name = c_char_p(entry.name).value.decode()
         self.offset_in_file = entry.offset_in_file_1 + (entry.offset_in_file_2 << 32)
         self.size_on_disk = entry.size_on_disk
         self.uncompressed_size = entry.uncompressed_size
@@ -185,9 +185,9 @@ class PackageReader:
         raise Exception("Version not supported or not a valid pak file")
 
     def read_file_list_15(self):
-        package.seek(self.header.file_list_offset)
+        self.package.seek(self.header.file_list_offset)
         num_files = c_uint32.from_buffer_copy(package.read(4)).value
-        compressed_file_list_size = c_uint32.from_buffer_copy(package.read(4)).value
+        compressed_file_list_size = c_uint32.from_buffer_copy(self.package.read(4)).value
         compressed_file_list = package.read(compressed_file_list_size)
         file_list_size = num_files*sizeof(FileEntry15)
         file_list = lz4.block.decompress(compressed_file_list, uncompressed_size = file_list_size)
@@ -196,13 +196,13 @@ class PackageReader:
 
         for i in range(0, num_files):
             entry = PackagedFileInfo.from_file_entry_15(file_list[i*sizeof(FileEntry15):(i+1)*sizeof(FileEntry15)])
-            self.files.append(FileReader(entry, package))
+            self.files.append(FileReader(entry, self.package))
 
     def read_file_list_18(self):
-        package.seek(self.header.file_list_offset)
-        num_files = c_uint32.from_buffer_copy(package.read(4)).value
-        compressed_file_list_size = c_uint32.from_buffer_copy(package.read(4)).value
-        compressed_file_list = package.read(compressed_file_list_size)
+        self.package.seek(self.header.file_list_offset)
+        num_files = c_uint32.from_buffer_copy(self.package.read(4)).value
+        compressed_file_list_size = c_uint32.from_buffer_copy(self.package.read(4)).value
+        compressed_file_list = self.package.read(compressed_file_list_size)
         file_list_size = num_files*sizeof(FileEntry18)
         file_list = lz4.block.decompress(compressed_file_list, uncompressed_size = file_list_size)
         if len(file_list) != file_list_size:
@@ -210,25 +210,25 @@ class PackageReader:
 
         for i in range(0, num_files):
             entry = PackagedFileInfo.from_file_entry_18(file_list[i*sizeof(FileEntry18):(i+1)*sizeof(FileEntry18)])
-            self.files.append(FileReader(entry, package))
+            self.files.append(FileReader(entry, self.package))
 
     def read_v15(self):
-        package.seek(4)
-        self.header = LSPKHeader15.from_buffer_copy(package.read(sizeof(LSPKHeader15)))
+        self.package.seek(4)
+        self.header = LSPKHeader15.from_buffer_copy(self.package.read(sizeof(LSPKHeader15)))
         self.flags = self.header.flags
 
         self.read_file_list_15()
 
     def read_v16(self):
-        package.seek(4)
-        self.header = LSPKHeader16.from_buffer_copy(package.read(sizeof(LSPKHeader16)))
+        self.package.seek(4)
+        self.header = LSPKHeader16.from_buffer_copy(self.package.read(sizeof(LSPKHeader16)))
         self.flags = self.header.flags
 
         self.read_file_list_15()
 
     def read_v18(self):
-        package.seek(4)
-        self.header = LSPKHeader16.from_buffer_copy(package.read(sizeof(LSPKHeader16)))
+        self.package.seek(4)
+        self.header = LSPKHeader16.from_buffer_copy(self.package.read(sizeof(LSPKHeader16)))
         self.flags = self.header.flags
 
         self.read_file_list_18()
